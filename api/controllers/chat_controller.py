@@ -1,11 +1,15 @@
 from fastapi import APIRouter
 from models.question import QuestionRequest
-from services.chat_service import generate_conversation_response, generate_response
+from services.chat_service import generate_conversation_response
+import logging
 
 router = APIRouter()
 
+logging.basicConfig(level=logging.INFO)
+
 @router.post("/chat")
 async def chat(request: QuestionRequest):
-    user_input = request.question
-    response = generate_conversation_response(user_input)
+    logging.info(f"Question reçue : {request.question}")
+    response = generate_conversation_response(request.question)
+    logging.info(f"Réponse envoyée : {response}")
     return {"response": response}
