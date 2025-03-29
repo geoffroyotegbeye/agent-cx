@@ -84,7 +84,8 @@ conversation_history = []
 
 # Fonction pour nettoyer la réponse générée
 def clean_response(response) -> str:
-    content = response.content if hasattr(response, 'content') else ''
+    # Vérifie si la réponse a la clé 'text'
+    content = response.get('text', '')  # Utilisation de .get pour éviter des erreurs si la clé n'existe pas
     cleaned_content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
     return cleaned_content
 
@@ -98,37 +99,57 @@ def generate_response(question: str) -> str:
 
     
 # Fonction pour détecter si la question est hors sujet
-def detect_off_topic(user_input: str, history: str) -> bool:
+def detect_off_topic(user_input: str, history: list) -> bool:
     """Détecte si la nouvelle question est hors sujet par rapport à l'historique."""
-    if not history.strip():
-        return False  # Pas d'historique, on ne peut pas détecter un changement de sujet.
+    if not history:
+        return False
 
-    common_words = len(set(user_input.lower().split()) & set(history.lower().split()))
-    
-    return common_words < 2  # Si moins de 2 mots en commun, on considère que c'est hors sujet
+    # Récupérer l'historique des deux dernières questions
+    recent_history = ' '.join(history[-2:]).lower()
+
+    # Vérifier le nombre de mots en commun
+    common_words = len(set(user_input.lower().split()) & set(recent_history.split()))
+
+    # Si moins de 1 mot en commun, on considère que c'est hors sujet
+    return common_words < 1
 
 
+
+MAX_HISTORY_LENGTH = 5  # On ne garde que les 5 derniers échanges
+
+
+# Fonction pour générer une réponse de conversation
 def generate_conversation_response(user_input: str) -> str:
     global conversation_history
+
+    # Ajouter l'entrée de l'utilisateur à l'historique
+    conversation_history.append(f"Utilisateur : {user_input}")
 
     # Vérifier si la question est hors sujet
     if detect_off_topic(user_input, conversation_history):
         return "Je pense que votre question est hors sujet par rapport à notre discussion actuelle. Voulez-vous revenir au sujet initial ?"
 
-    # Ajouter l'entrée de l'utilisateur à l'historique
-    conversation_history.append(f"Utilisateur : {user_input}")
-
-    ## Afficher l'historique de la conversation pour le débogage
+    # Afficher l'historique de la conversation pour débogage
     print("HISTORIQUE ENVOYÉ :", "\n".join(conversation_history))
 
-
-    # Générer la réponse avec historique
+    # Générer la réponse avec l'historique
     response = conversation_chain.invoke({"question": user_input, "history": "\n".join(conversation_history)})
 
-    # Ajouter la réponse du modèle à l'historique
-    conversation_history = manage_conversation_history(user_input, response)
+    # Débogage : Affiche la réponse brute
+    print("Réponse brute:", response)
 
-    return response
+    # Nettoyer la réponse
+    cleaned_response = clean_response(response)
+
+    # Ajouter la réponse du modèle à l'historique
+    conversation_history.append(f"Assistant : {cleaned_response}")
+
+    # Gérer la longueur de l'historique
+    if len(conversation_history) > MAX_HISTORY_LENGTH:
+        conversation_history = conversation_history[-MAX_HISTORY_LENGTH:]
+
+    return cleaned_response
+
 
 
 def fetch_operator_offers():
@@ -137,7 +158,6 @@ def fetch_operator_offers():
     results = search.run(query)
     return results
 
-MAX_HISTORY_LENGTH = 5  # On ne garde que les 5 derniers échanges
 
 def manage_conversation_history(user_input, response):
     global conversation_history
